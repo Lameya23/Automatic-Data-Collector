@@ -8,4 +8,4 @@ dist/
 *.spec
 
 # Collected data
-collected_data.json
+# collected_data.json
