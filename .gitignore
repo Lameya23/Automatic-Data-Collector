@@ -1,0 +1,11 @@
+# Virtual environment
+venv/
+__pycache__/
+
+# PyInstaller artifacts
+build/
+dist/
+*.spec
+
+# Collected data
+collected_data.json
