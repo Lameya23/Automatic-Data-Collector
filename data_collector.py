@@ -5,9 +5,11 @@ import datetime
 import json
 import atexit
 import time # Used for simulating program runtime
+from pathlib import Path
 
 # --- Hardcoded Configuration ---
-LOG_FILE_PATH = "/home/ubuntu/collected_data.json"
+# Use pathlib to define the log file path relative to the script's execution directory
+LOG_FILE_PATH = Path("collected_data.json")
 START_TIME = datetime.datetime.now()
 USAGE_COUNTER = 0 # Hardcoded counter for a specific action
 
@@ -46,7 +48,7 @@ def save_data_on_exit():
     }
     
     try:
-        with open(LOG_FILE_PATH, 'w') as f:
+        with open(LOG_FILE_PATH, 'w', encoding='utf-8') as f:
             json.dump(final_log, f, indent=4)
         print(f"\n[INFO] Data saved automatically to {LOG_FILE_PATH}")
     except Exception as e:
