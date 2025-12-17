@@ -55,7 +55,43 @@ def get_installed_apps():
     else:
         return [f"App discovery not implemented for OS: {os_name}"]
 
-# --- Data Collection Functions ---
+def lookup_vulnerabilities(app_list):
+    """
+    Simulates looking up known vulnerabilities (CVEs) for installed applications.
+    In a real scenario, this would call an external API (e.g., NVD, ExploitDB).
+    
+    Returns a dictionary mapping app names to a list of mock vulnerabilities.
+    """
+    
+    # Hardcoded mock data for demonstration purposes
+    mock_vulnerabilities = {
+        "python3": [
+            {"cve_id": "CVE-2023-4023", "severity": "High", "description": "Path Traversal in Python's 'tarfile' module."},
+            {"cve_id": "CVE-2024-1234", "severity": "Medium", "description": "Denial of Service in 'json' module."}
+        ],
+        "git": [
+            {"cve_id": "CVE-2022-24765", "severity": "Critical", "description": "Arbitrary code execution via git clone."},
+        ],
+        "openssl": [
+            {"cve_id": "CVE-2023-0808", "severity": "High", "description": "Heartbleed-like vulnerability in OpenSSL."}
+        ]
+    }
+    
+    vulnerability_results = {}
+    
+    # Check if any installed app name matches our mock data keys
+    for app_name in app_list:
+        # Simple check: if the app name contains a key from mock_vulnerabilities
+        # This is a simplified check for the sandbox environment
+        for mock_app, cves in mock_vulnerabilities.items():
+            if mock_app in app_name.lower():
+                vulnerability_results[app_name] = cves
+                break
+    
+    # Add a placeholder for the API status
+    vulnerability_results["API_STATUS"] = "Vulnerability lookup simulated using hardcoded mock data. To use a real API (e.g., NVD), you would need an API key and a more robust parsing logic."
+    
+    return vulnerability_results
 
 def collect_system_info():
     """Collects system information automatically."""
@@ -79,6 +115,7 @@ def save_data_on_exit():
     
     system_data = collect_system_info()
     installed_apps = get_installed_apps()
+    vulnerability_results = lookup_vulnerabilities(installed_apps)
     usage_data = {
         "program_start": START_TIME.strftime("%Y-%m-%d %H:%M:%S"),
         "program_end": end_time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -88,6 +125,7 @@ def save_data_on_exit():
     final_log = {
         "system_info": system_data,
         "installed_apps": installed_apps,
+        "vulnerability_results": vulnerability_results,
         "usage_data": usage_data
     }
     
