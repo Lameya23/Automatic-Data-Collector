@@ -1,0 +1,65 @@
+{
+    "Apache HTTP Server": [
+        {
+            "cve_id": "CVE-2025-0001",
+            "title": "Critical vulnerability in Apache HTTP Server allowing remote code execution.",
+            "severity": "CRITICAL",
+            "problem_types": [
+                "Remote Code Execution"
+            ],
+            "vendor": "Apache Software Foundation",
+            "versions": [
+                {
+                    "version": "2.4.50",
+                    "status": "affected",
+                    "lessThan": "2.4.58",
+                    "versionType": "semver"
+                }
+            ]
+        }
+    ],
+    "OpenSSL": [
+        {
+            "cve_id": "CVE-2025-0002",
+            "title": "Information disclosure in OpenSSL due to buffer overflow.",
+            "severity": "HIGH",
+            "problem_types": [
+                "Buffer Overflow"
+            ],
+            "vendor": "OpenSSL",
+            "versions": [
+                {
+                    "version": "3.0.0",
+                    "status": "affected",
+                    "lessThan": "3.0.10",
+                    "versionType": "semver"
+                },
+                {
+                    "version": "1.1.1",
+                    "status": "affected",
+                    "lessThan": "1.1.1w",
+                    "versionType": "semver"
+                }
+            ]
+        }
+    ],
+    "WordPress": [
+        {
+            "cve_id": "CVE-2025-0003",
+            "title": "Cross-Site Scripting (XSS) in WordPress core.",
+            "severity": "MEDIUM",
+            "problem_types": [
+                "Cross-Site Scripting (XSS)"
+            ],
+            "vendor": "WordPress Foundation",
+            "versions": [
+                {
+                    "version": "6.0",
+                    "status": "affected",
+                    "lessThan": "6.4.3",
+                    "versionType": "semver"
+                }
+            ]
+        }
+    ]
+}
