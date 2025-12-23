@@ -4,7 +4,7 @@
         "os_version": "#1 SMP PREEMPT_DYNAMIC Tue Sep  3 09:03:50 UTC 2024",
         "hostname": "08274e4d8d5d",
         "username": "ubuntu",
-        "collection_time": "2025-12-22 07:05:00"
+        "collection_time": "2025-12-22 20:34:09"
     },
     "installed_apps": [
         "adduser",
@@ -27,7 +27,10 @@
                 "title": "Critical vulnerability in Apache HTTP Server allowing remote code execution.",
                 "severity": "CRITICAL",
                 "vendor": "Apache Software Foundation",
-                "note": "Version check required. This CVE affects versions: [{'version': '2.4.50', 'status': 'affected', 'lessThan': '2.4.58', 'versionType': 'semver'}]"
+                "affected_version": "2.4.50",
+                "status": "affected",
+                "less_than": "2.4.58",
+                "note": "Version check required. This CVE affects versions: 2.4.50"
             }
         ],
         "OpenSSL": [
@@ -36,14 +39,27 @@
                 "title": "Information disclosure in OpenSSL due to buffer overflow.",
                 "severity": "HIGH",
                 "vendor": "OpenSSL",
-                "note": "Version check required. This CVE affects versions: [{'version': '3.0.0', 'status': 'affected', 'lessThan': '3.0.10', 'versionType': 'semver'}, {'version': '1.1.1', 'status': 'affected', 'lessThan': '1.1.1w', 'versionType': 'semver'}]"
+                "affected_version": "3.0.0",
+                "status": "affected",
+                "less_than": "3.0.10",
+                "note": "Version check required. This CVE affects versions: 3.0.0"
+            },
+            {
+                "cve_id": "CVE-2025-0002",
+                "title": "Information disclosure in OpenSSL due to buffer overflow.",
+                "severity": "HIGH",
+                "vendor": "OpenSSL",
+                "affected_version": "1.1.1",
+                "status": "affected",
+                "less_than": "1.1.1w",
+                "note": "Version check required. This CVE affects versions: 1.1.1"
             }
         ],
         "STATUS": "Potential vulnerabilities found. Requires manual version verification against the 'note' field."
     },
     "usage_data": {
-        "program_start": "2025-12-22 07:04:55",
-        "program_end": "2025-12-22 07:05:00",
+        "program_start": "2025-12-22 20:34:04",
+        "program_end": "2025-12-22 20:34:09",
         "button_clicks_count": 3
     }
 }

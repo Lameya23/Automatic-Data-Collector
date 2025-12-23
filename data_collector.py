@@ -1,3 +1,4 @@
+
 import platform
 import socket
 import getpass
@@ -8,14 +9,15 @@ import time
 from pathlib import Path
 import subprocess
 import sys
+import sqlite3
 
 # --- Hardcoded Configuration ---
+DB_FILE_PATH = Path("cve_database.db")
 LOG_FILE_PATH = Path("collected_data.json")
 START_TIME = datetime.datetime.now()
 USAGE_COUNTER = 0
 
 # --- Embedded Mock CVE Data (Simplified CVE 5.0 Format) ---
-# This data is embedded to ensure the script runs on any system without external files.
 MOCK_CVE_DATA = [
     {
         "cveMetadata": {"cveId": "CVE-2025-0001"},
@@ -89,6 +91,98 @@ MOCK_CVE_DATA = [
     }
 ]
 
+# --- Database Functions ---
+
+def initialize_db():
+    """Initializes the SQLite database with required tables."""
+    conn = sqlite3.connect(DB_FILE_PATH)
+    cursor = conn.cursor()
+    
+    # Table 1: Vulnerabilities (Main CVE info)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vulnerabilities (
+            cve_id TEXT PRIMARY KEY,
+            title TEXT,
+            severity TEXT,
+            vendor TEXT
+        )
+    """)
+    
+    # Table 2: Products (Software/Hardware affected)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            product_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE
+        )
+    """)
+    
+    # Table 3: Affected Versions (Detailed version info)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS affected_versions (
+            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cve_id TEXT,
+            product_id INTEGER,
+            version TEXT,
+            status TEXT,
+            less_than TEXT,
+            version_type TEXT,
+            FOREIGN KEY (cve_id) REFERENCES vulnerabilities(cve_id),
+            FOREIGN KEY (product_id) REFERENCES products(product_id)
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+
+def get_or_create_product_id(cursor, product_name):
+    """Gets the product_id if it exists, otherwise creates it and returns the new ID."""
+    cursor.execute("SELECT product_id FROM products WHERE name = ?", (product_name,))
+    result = cursor.fetchone()
+    if result:
+        return result[0]
+    else:
+        cursor.execute("INSERT INTO products (name) VALUES (?)", (product_name,))
+        return cursor.lastrowid
+
+def populate_db_from_mock():
+    """Populates the SQLite database using the embedded MOCK_CVE_DATA."""
+    initialize_db()
+    conn = sqlite3.connect(DB_FILE_PATH)
+    cursor = conn.cursor()
+    
+    print(f"[INFO] Populating SQLite DB with {len(MOCK_CVE_DATA)} embedded CVE entries...")
+    
+    for cve_json in MOCK_CVE_DATA:
+        try:
+            extracted_data = extract_cve_data(cve_json)
+            cve_id = extracted_data['cve_id']
+            
+            # 1. Insert into vulnerabilities table
+            cursor.execute("INSERT OR IGNORE INTO vulnerabilities (cve_id, title, severity, vendor) VALUES (?, ?, ?, ?)",
+                           (cve_id, extracted_data['title'], extracted_data['severity'], extracted_data['affected_products'][0]['vendor']))
+            
+            # 2. Insert into products and affected_versions tables
+            for affected_product in extracted_data['affected_products']:
+                product_name = affected_product['product']
+                vendor = affected_product['vendor']
+                
+                product_id = get_or_create_product_id(cursor, product_name)
+                
+                for version_info in affected_product['versions']:
+                    cursor.execute("""
+                        INSERT INTO affected_versions 
+                        (cve_id, product_id, version, status, less_than, version_type) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (cve_id, product_id, version_info['version'], version_info['status'], 
+                          version_info['lessThan'], version_info['versionType']))
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to populate CVE {cve_json.get('cveMetadata', {}).get('cveId')}: {e}")
+            
+    conn.commit()
+    conn.close()
+    print("[INFO] SQLite DB population complete.")
+
 # --- Vulnerability Analysis Functions (Adapted from cve_parser.py) ---
 
 def extract_cve_data(cve_json):
@@ -141,66 +235,51 @@ def extract_cve_data(cve_json):
         'affected_products': affected_products
     }
 
-def build_searchable_database_from_mock():
-    """Uses the embedded MOCK_CVE_DATA to build a searchable database indexed by product name."""
-    searchable_db = {}
-    
-    for cve_json in MOCK_CVE_DATA:
-        try:
-            extracted_data = extract_cve_data(cve_json)
-            
-            for affected_product in extracted_data['affected_products']:
-                product_name = affected_product['product']
-                
-                cve_entry = {
-                    'cve_id': extracted_data['cve_id'],
-                    'title': extracted_data['title'],
-                    'severity': extracted_data['severity'],
-                    'problem_types': extracted_data['problem_types'],
-                    'vendor': affected_product['vendor'],
-                    'versions': affected_product['versions']
-                }
-                
-                if product_name not in searchable_db:
-                    searchable_db[product_name] = []
-                
-                searchable_db[product_name].append(cve_entry)
-                
-        except Exception as e:
-            # In a real scenario, this would log the error
-            pass 
-            
-    return searchable_db
-
-def lookup_vulnerabilities(installed_apps, cve_db):
+def lookup_vulnerabilities(installed_apps):
     """
-    Checks installed applications against the internal CVE database.
+    Checks installed applications against the internal SQLite CVE database.
     NOTE: This is a simplified lookup (case-insensitive name match only).
     A real-world scanner requires version matching logic.
     """
+    conn = sqlite3.connect(DB_FILE_PATH)
+    cursor = conn.cursor()
     vulnerability_results = {}
     
-    # Simple case-insensitive name matching
+    # Placeholder for the actual lookup logic
     for app_name in installed_apps:
-        for product_name, cves in cve_db.items():
-            if product_name.lower() in app_name.lower():
-                # Found a potential match
-                if app_name not in vulnerability_results:
-                    vulnerability_results[app_name] = []
+        # Simplified SQL query: find all CVEs where the product name contains the app_name
+        # In a real scenario, this would be a more complex query with version matching
+        cursor.execute("""
+            SELECT 
+                v.cve_id, v.title, v.severity, v.vendor, 
+                av.version, av.status, av.less_than, av.version_type
+            FROM vulnerabilities v
+            JOIN affected_versions av ON v.cve_id = av.cve_id
+            JOIN products p ON av.product_id = p.product_id
+            WHERE p.name LIKE ?
+        """, ('%' + app_name + '%',))
+        
+        results = cursor.fetchall()
+        
+        if results:
+            if app_name not in vulnerability_results:
+                vulnerability_results[app_name] = []
                 
-                # In a real scenario, we would now check the installed version
-                # against the affected versions in 'cves' list.
+            for row in results:
+                cve_id, title, severity, vendor, version, status, less_than, version_type = row
                 
-                # For this self-contained example, we just list the potential CVEs
-                # and add a note about the version check.
-                for cve in cves:
-                    vulnerability_results[app_name].append({
-                        "cve_id": cve['cve_id'],
-                        "title": cve['title'],
-                        "severity": cve['severity'],
-                        "vendor": cve['vendor'],
-                        "note": "Version check required. This CVE affects versions: " + str(cve['versions'])
-                    })
+                vulnerability_results[app_name].append({
+                    "cve_id": cve_id,
+                    "title": title,
+                    "severity": severity,
+                    "vendor": vendor,
+                    "affected_version": version,
+                    "status": status,
+                    "less_than": less_than,
+                    "note": "Version check required. This CVE affects versions: " + str(version)
+                })
+    
+    conn.close()
     
     if not vulnerability_results:
         vulnerability_results["STATUS"] = "No potential vulnerabilities found for installed applications in the embedded database."
@@ -262,8 +341,9 @@ def save_data_on_exit():
     installed_apps = get_installed_apps()
     
     # 2. Build Internal CVE DB and Analyze
-    cve_db = build_searchable_database_from_mock()
-    vulnerability_results = lookup_vulnerabilities(installed_apps, cve_db)
+    # Initialize and populate the DB if it doesn't exist or is empty
+    populate_db_from_mock()
+    vulnerability_results = lookup_vulnerabilities(installed_apps)
     
     # 3. Finalize Usage Data
     usage_data = {
@@ -310,3 +390,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
