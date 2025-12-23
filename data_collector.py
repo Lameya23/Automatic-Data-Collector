@@ -1,4 +1,3 @@
-
 import platform
 import socket
 import getpass
@@ -9,15 +8,15 @@ import time
 from pathlib import Path
 import subprocess
 import sys
-import sqlite3
+# Removed: import sqlite3
 
 # --- Hardcoded Configuration ---
-DB_FILE_PATH = Path("cve_database.db")
 LOG_FILE_PATH = Path("collected_data.json")
 START_TIME = datetime.datetime.now()
 USAGE_COUNTER = 0
 
 # --- Embedded Mock CVE Data (Simplified CVE 5.0 Format) ---
+# This data is embedded to ensure the script runs on any system without external files.
 MOCK_CVE_DATA = [
     {
         "cveMetadata": {"cveId": "CVE-2025-0001"},
@@ -91,120 +90,86 @@ MOCK_CVE_DATA = [
     }
 ]
 
-# --- Database Functions ---
+# --- NoSQL (MongoDB) Simulation Functions ---
 
-def initialize_db():
-    """Initializes the SQLite database with required tables."""
-    conn = sqlite3.connect(DB_FILE_PATH)
-    cursor = conn.cursor()
+def get_program_id(program_name, programs_collection, program_name_to_id):
+    """Gets the program_id if it exists, otherwise creates it and returns the new ID."""
+    if program_name in program_name_to_id:
+        return program_name_to_id[program_name]
     
-    # Table 1: Vulnerabilities (Main CVE info)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS vulnerabilities (
-            cve_id TEXT PRIMARY KEY,
-            title TEXT,
-            severity TEXT,
-            vendor TEXT
-        )
-    """)
+    # Simple auto-incrementing ID simulation
+    new_id = len(programs_collection) + 1
     
-    # Table 2: Products (Software/Hardware affected)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS products (
-            product_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE
-        )
-    """)
-    
-    # Table 4: Aliases (Alternative names for products)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS aliases (
-            alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER,
-            alias_name TEXT UNIQUE,
-            FOREIGN KEY (product_id) REFERENCES products(product_id)
-        )
-    """)
-    
-    # Table 3: Affected Versions (Detailed version info)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS affected_versions (
-            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cve_id TEXT,
-            product_id INTEGER,
-            version TEXT,
-            status TEXT,
-            less_than TEXT,
-            version_type TEXT,
-            FOREIGN KEY (cve_id) REFERENCES vulnerabilities(cve_id),
-            FOREIGN KEY (product_id) REFERENCES products(product_id)
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
+    # Mock Aliases for the hardcoded products
+    aliases = []
+    if program_name == "Apache HTTP Server":
+        aliases = ["httpd", "apache2"]
+    elif program_name == "OpenSSL":
+        aliases = ["libssl", "openssl-libs"]
+        
+    programs_collection[new_id] = {
+        "program_id": new_id,
+        "program_name": program_name,
+        "vendor": "Unknown Vendor", # Extracted from CVE data later
+        "aliases": aliases
+    }
+    program_name_to_id[program_name] = new_id
+    return new_id
 
-def get_or_create_product_id(cursor, product_name):
-    """Gets the product_id if it exists, otherwise creates it and returns the new ID."""
-    cursor.execute("SELECT product_id FROM products WHERE name = ?", (product_name,))
-    result = cursor.fetchone()
-    if result:
-        return result[0]
-    else:
-        cursor.execute("INSERT INTO products (name) VALUES (?)", (product_name,))
-        return cursor.lastrowid
-
-def populate_db_from_mock():
-    """Populates the SQLite database using the embedded MOCK_CVE_DATA."""
-    initialize_db()
-    conn = sqlite3.connect(DB_FILE_PATH)
-    cursor = conn.cursor()
+def build_nosql_collections_from_mock():
+    """
+    Populates the three in-memory collections (programs, cves, affected) 
+    using the embedded MOCK_CVE_DATA.
+    """
+    programs_collection = {}  # {id: {name, aliases}}
+    cves_collection = {}      # {cve_id: {title, severity}}
+    affected_collection = []  # [{program_id, cve_id, versions}]
     
-    print(f"[INFO] Populating SQLite DB with {len(MOCK_CVE_DATA)} embedded CVE entries...")
+    # Helper map for quick lookup and preventing program name duplication
+    program_name_to_id = {}
+    
+    print(f"[INFO] Building NoSQL collections with {len(MOCK_CVE_DATA)} embedded CVE entries...")
     
     for cve_json in MOCK_CVE_DATA:
         try:
             extracted_data = extract_cve_data(cve_json)
             cve_id = extracted_data['cve_id']
             
-            # 1. Insert into vulnerabilities table
-            cursor.execute("INSERT OR IGNORE INTO vulnerabilities (cve_id, title, severity, vendor) VALUES (?, ?, ?, ?)",
-                           (cve_id, extracted_data['title'], extracted_data['severity'], extracted_data['affected_products'][0]['vendor']))
+            # 1. Populate cves collection
+            cves_collection[cve_id] = {
+                "cve_id": cve_id,
+                "title": extracted_data['title'],
+                "severity": extracted_data['severity'],
+                "vendor": extracted_data['affected_products'][0]['vendor']
+            }
             
-            # 2. Insert into products and affected_versions tables
+            # 2. Populate programs and affected collections
             for affected_product in extracted_data['affected_products']:
-                product_name = affected_product['product']
-                vendor = affected_product['vendor']
+                program_name = affected_product['product']
                 
-                product_id = get_or_create_product_id(cursor, product_name)
+                program_id = get_program_id(program_name, programs_collection, program_name_to_id)
                 
-                # Insert mock aliases for the hardcoded products
-                if product_name == "Apache HTTP Server":
-                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "httpd"))
-                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "apache2"))
-                elif product_name == "OpenSSL":
-                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "libssl"))
-                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "openssl-libs"))
+                # Update vendor info in programs collection
+                programs_collection[program_id]['vendor'] = affected_product['vendor']
                 
-                for version_info in affected_product['versions']:
-                    cursor.execute("""
-                        INSERT INTO affected_versions 
-                        (cve_id, product_id, version, status, less_than, version_type) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (cve_id, product_id, version_info['version'], version_info['status'], 
-                          version_info['lessThan'], version_info['versionType']))
+                # Populate affected collection
+                affected_collection.append({
+                    "program_id": program_id,
+                    "cve_id": cve_id,
+                    "versions": affected_product['versions']
+                })
             
         except Exception as e:
-            print(f"[ERROR] Failed to populate CVE {cve_json.get('cveMetadata', {}).get('cveId')}: {e}")
+            print(f"[ERROR] Failed to process CVE {cve_json.get('cveMetadata', {}).get('cveId')}: {e}")
             
-    conn.commit()
-    conn.close()
-    print("[INFO] SQLite DB population complete.")
+    print("[INFO] NoSQL collection build complete.")
+    return programs_collection, cves_collection, affected_collection
 
-# --- Vulnerability Analysis Functions (Adapted from cve_parser.py) ---
+# --- Vulnerability Analysis Functions (Core Logic) ---
 
 def extract_cve_data(cve_json):
     """Extracts required information from a single CVE JSON object (CVE 5.0 format)."""
+    # ... (Same as before) ...
     cve_id = cve_json.get('cveMetadata', {}).get('cveId')
     
     descriptions = cve_json.get('containers', {}).get('cna', {}).get('descriptions', [])
@@ -253,78 +218,60 @@ def extract_cve_data(cve_json):
         'affected_products': affected_products
     }
 
-def lookup_vulnerabilities(installed_apps):
+def lookup_vulnerabilities(installed_apps, programs_collection, cves_collection, affected_collection):
     """
-    Checks installed applications against the internal SQLite CVE database.
-    NOTE: This is a simplified lookup (case-insensitive name match only).
-    A real-world scanner requires version matching logic.
+    Checks installed applications against the in-memory NoSQL-like collections.
     """
-    conn = sqlite3.connect(DB_FILE_PATH)
-    cursor = conn.cursor()
     vulnerability_results = {}
     
-    # Placeholder for the actual lookup logic
+    # Helper map for quick lookup of program names/aliases to program_id
+    alias_to_id = {}
+    for p_id, program in programs_collection.items():
+        alias_to_id[program['program_name'].lower()] = p_id
+        for alias in program['aliases']:
+            alias_to_id[alias.lower()] = p_id
+
     for app_name in installed_apps:
-        # Find product_ids matching the app_name in either the products table or the aliases table
-        cursor.execute("""
-            SELECT product_id FROM products WHERE name = ?
-            UNION
-            SELECT product_id FROM aliases WHERE alias_name = ?
-        """, (app_name, app_name))
+        # 1. Find matching program_id using name or alias
+        app_name_lower = app_name.lower()
         
-        matching_product_ids = [row[0] for row in cursor.fetchall()]
+        # Simple exact match
+        matching_program_id = alias_to_id.get(app_name_lower)
         
-        if not matching_product_ids:
-            # Try a fuzzy match (LIKE) if exact match fails
-            cursor.execute("""
-                SELECT product_id FROM products WHERE name LIKE ?
-                UNION
-                SELECT product_id FROM aliases WHERE alias_name LIKE ?
-            """, ('%' + app_name + '%', '%' + app_name + '%'))
-            matching_product_ids = [row[0] for row in cursor.fetchall()]
-            
-        if not matching_product_ids:
+        # If no exact match, try fuzzy match (simple substring check)
+        if not matching_program_id:
+            for alias_lower, p_id in alias_to_id.items():
+                if app_name_lower in alias_lower or alias_lower in app_name_lower:
+                    matching_program_id = p_id
+                    break
+        
+        if not matching_program_id:
             continue # No match found, move to the next app
-            
-        # Convert list of IDs to a comma-separated string for the IN clause
-        product_ids_str = ','.join(map(str, matching_product_ids))
-        
-        # SQL query to retrieve all CVEs for the matching product IDs
-        cursor.execute(f"""
-            SELECT 
-                v.cve_id, v.title, v.severity, v.vendor, 
-                av.version, av.status, av.less_than, av.version_type
-            FROM vulnerabilities v
-            JOIN affected_versions av ON v.cve_id = av.cve_id
-            WHERE av.product_id IN ({product_ids_str})
-        """)
-        
-        results = cursor.fetchall()
-        
-        if results:
-            if app_name not in vulnerability_results:
-                vulnerability_results[app_name] = []
+
+        # 2. Find all CVEs linked to this program_id in the affected collection
+        for affected_entry in affected_collection:
+            if affected_entry['program_id'] == matching_program_id:
+                cve_id = affected_entry['cve_id']
+                cve_data = cves_collection.get(cve_id)
+                program_data = programs_collection.get(matching_program_id)
                 
-            for row in results:
-                cve_id, title, severity, vendor, version, status, less_than, version_type = row
+                if app_name not in vulnerability_results:
+                    vulnerability_results[app_name] = []
                 
+                # 3. Compile the final result
                 vulnerability_results[app_name].append({
                     "cve_id": cve_id,
-                    "title": title,
-                    "severity": severity,
-                    "vendor": vendor,
-                    "affected_version": version,
-                    "status": status,
-                    "less_than": less_than,
-                    "note": "Version check required. This CVE affects versions: " + str(version)
+                    "title": cve_data['title'],
+                    "severity": cve_data['severity'],
+                    "vendor": cve_data['vendor'],
+                    "affected_versions": affected_entry['versions'],
+                    "note": "Version check required. This CVE affects versions listed in 'affected_versions'."
                 })
-    
-    conn.close()
     
     if not vulnerability_results:
         vulnerability_results["STATUS"] = "No potential vulnerabilities found for installed applications in the embedded database."
     else:
-        vulnerability_results["STATUS"] = "Potential vulnerabilities found. Requires manual version verification against the 'note' field."
+        vulnerability_results["STATUS"] = "Potential vulnerabilities found. Requires manual version verification against the 'affected_versions' field."
         
     return vulnerability_results
 
@@ -380,10 +327,9 @@ def save_data_on_exit():
     system_data = collect_system_info()
     installed_apps = get_installed_apps()
     
-    # 2. Build Internal CVE DB and Analyze
-    # Initialize and populate the DB if it doesn't exist or is empty
-    populate_db_from_mock()
-    vulnerability_results = lookup_vulnerabilities(installed_apps)
+    # 2. Build Internal NoSQL Collections and Analyze
+    programs_col, cves_col, affected_col = build_nosql_collections_from_mock()
+    vulnerability_results = lookup_vulnerabilities(installed_apps, programs_col, cves_col, affected_col)
     
     # 3. Finalize Usage Data
     usage_data = {
@@ -430,4 +376,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
