@@ -116,6 +116,16 @@ def initialize_db():
         )
     """)
     
+    # Table 4: Aliases (Alternative names for products)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS aliases (
+            alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER,
+            alias_name TEXT UNIQUE,
+            FOREIGN KEY (product_id) REFERENCES products(product_id)
+        )
+    """)
+    
     # Table 3: Affected Versions (Detailed version info)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS affected_versions (
@@ -167,6 +177,14 @@ def populate_db_from_mock():
                 vendor = affected_product['vendor']
                 
                 product_id = get_or_create_product_id(cursor, product_name)
+                
+                # Insert mock aliases for the hardcoded products
+                if product_name == "Apache HTTP Server":
+                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "httpd"))
+                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "apache2"))
+                elif product_name == "OpenSSL":
+                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "libssl"))
+                    cursor.execute("INSERT OR IGNORE INTO aliases (product_id, alias_name) VALUES (?, ?)", (product_id, "openssl-libs"))
                 
                 for version_info in affected_product['versions']:
                     cursor.execute("""
@@ -247,17 +265,39 @@ def lookup_vulnerabilities(installed_apps):
     
     # Placeholder for the actual lookup logic
     for app_name in installed_apps:
-        # Simplified SQL query: find all CVEs where the product name contains the app_name
-        # In a real scenario, this would be a more complex query with version matching
+        # Find product_ids matching the app_name in either the products table or the aliases table
         cursor.execute("""
+            SELECT product_id FROM products WHERE name = ?
+            UNION
+            SELECT product_id FROM aliases WHERE alias_name = ?
+        """, (app_name, app_name))
+        
+        matching_product_ids = [row[0] for row in cursor.fetchall()]
+        
+        if not matching_product_ids:
+            # Try a fuzzy match (LIKE) if exact match fails
+            cursor.execute("""
+                SELECT product_id FROM products WHERE name LIKE ?
+                UNION
+                SELECT product_id FROM aliases WHERE alias_name LIKE ?
+            """, ('%' + app_name + '%', '%' + app_name + '%'))
+            matching_product_ids = [row[0] for row in cursor.fetchall()]
+            
+        if not matching_product_ids:
+            continue # No match found, move to the next app
+            
+        # Convert list of IDs to a comma-separated string for the IN clause
+        product_ids_str = ','.join(map(str, matching_product_ids))
+        
+        # SQL query to retrieve all CVEs for the matching product IDs
+        cursor.execute(f"""
             SELECT 
                 v.cve_id, v.title, v.severity, v.vendor, 
                 av.version, av.status, av.less_than, av.version_type
             FROM vulnerabilities v
             JOIN affected_versions av ON v.cve_id = av.cve_id
-            JOIN products p ON av.product_id = p.product_id
-            WHERE p.name LIKE ?
-        """, ('%' + app_name + '%',))
+            WHERE av.product_id IN ({product_ids_str})
+        """)
         
         results = cursor.fetchall()
         

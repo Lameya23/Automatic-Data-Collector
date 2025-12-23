@@ -4,7 +4,7 @@
         "os_version": "#1 SMP PREEMPT_DYNAMIC Tue Sep  3 09:03:50 UTC 2024",
         "hostname": "08274e4d8d5d",
         "username": "ubuntu",
-        "collection_time": "2025-12-22 20:34:09"
+        "collection_time": "2025-12-22 21:05:26"
     },
     "installed_apps": [
         "adduser",
@@ -22,6 +22,16 @@
     ],
     "vulnerability_analysis": {
         "Apache HTTP Server": [
+            {
+                "cve_id": "CVE-2025-0001",
+                "title": "Critical vulnerability in Apache HTTP Server allowing remote code execution.",
+                "severity": "CRITICAL",
+                "vendor": "Apache Software Foundation",
+                "affected_version": "2.4.50",
+                "status": "affected",
+                "less_than": "2.4.58",
+                "note": "Version check required. This CVE affects versions: 2.4.50"
+            },
             {
                 "cve_id": "CVE-2025-0001",
                 "title": "Critical vulnerability in Apache HTTP Server allowing remote code execution.",
@@ -53,13 +63,33 @@
                 "status": "affected",
                 "less_than": "1.1.1w",
                 "note": "Version check required. This CVE affects versions: 1.1.1"
+            },
+            {
+                "cve_id": "CVE-2025-0002",
+                "title": "Information disclosure in OpenSSL due to buffer overflow.",
+                "severity": "HIGH",
+                "vendor": "OpenSSL",
+                "affected_version": "3.0.0",
+                "status": "affected",
+                "less_than": "3.0.10",
+                "note": "Version check required. This CVE affects versions: 3.0.0"
+            },
+            {
+                "cve_id": "CVE-2025-0002",
+                "title": "Information disclosure in OpenSSL due to buffer overflow.",
+                "severity": "HIGH",
+                "vendor": "OpenSSL",
+                "affected_version": "1.1.1",
+                "status": "affected",
+                "less_than": "1.1.1w",
+                "note": "Version check required. This CVE affects versions: 1.1.1"
             }
         ],
         "STATUS": "Potential vulnerabilities found. Requires manual version verification against the 'note' field."
     },
     "usage_data": {
-        "program_start": "2025-12-22 20:34:04",
-        "program_end": "2025-12-22 20:34:09",
+        "program_start": "2025-12-22 21:05:21",
+        "program_end": "2025-12-22 21:05:26",
         "button_clicks_count": 3
     }
 }
